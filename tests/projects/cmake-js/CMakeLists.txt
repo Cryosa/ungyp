@@ -1,0 +1,6 @@
+include("${PROJECT_SOURCE_DIR}/cmake/CMakeJS.cmake")
+add_library(test_cmake_js SHARED "${PROJECT_SOURCE_DIR}/examples/node-api-c/addon.c" ${CMAKE_JS_SRC})
+target_include_directories(test_cmake_js PRIVATE ${CMAKE_JS_INC})
+target_link_libraries(test_cmake_js PRIVATE ${CMAKE_JS_LIB})
+target_compile_definitions(test_cmake_js PRIVATE NAPI_VERSION=8)
+set_target_properties(test_cmake_js PROPERTIES PREFIX "" SUFFIX ".node")

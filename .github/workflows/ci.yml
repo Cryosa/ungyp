@@ -1,0 +1,146 @@
+name: build
+on: [push, pull_request]
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [22.14.0, 24.0.0]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: cmake -S . -B build -DUNGYP_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release "-DUNGYP_NODE_VERSION=${{ matrix.node }}"
+      - run: cmake --build build --config Release --parallel
+      - run: ctest --test-dir build -C Release --output-on-failure
+      - run: cmake --workflow --preset release
+        if: runner.os != 'Windows'
+        working-directory: examples/node-api-c
+      - name: Build without Node on PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: examples/node-api-c
+        run: |
+          $cmake = (Get-Command cmake).Source
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          if (Get-Command node -ErrorAction SilentlyContinue) { throw 'Node is still on PATH' }
+          & $cmake --workflow --preset release
+      - run: node tests/js/assert-addon.cjs "${{ github.workspace }}/examples/node-api-c/build/Release/node_api_c.node"
+  cross-os-build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare Zig 0.17.0
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path build/toolchains -Force | Out-Null
+          $archive = "$PWD/build/toolchains/zig.zip"
+          Invoke-WebRequest https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428') { throw 'Zig checksum mismatch' }
+          Set-Location build/toolchains
+          cmake -E tar xf $archive
+      - name: Cross-build Linux x64 and ARM64 without Node
+        shell: pwsh
+        run: |
+          $cmake = (Get-Command cmake).Source
+          $ninja = (Get-Command ninja).Source
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          if (Get-Command node -ErrorAction SilentlyContinue) { throw 'Node is still on PATH' }
+          foreach ($arch in 'x86_64', 'aarch64') {
+            & $cmake "-DTEST_DIR=$PWD/build/cross-os" "-DTARGET_ARCH=$arch" "-DTOOLCHAIN_FILE=$PWD/cmake/toolchains/zig-linux.cmake" "-DTOOLCHAIN_OPTIONS=-DUNGYP_ZIG_EXECUTABLE=$PWD/build/toolchains/zig-x86_64-windows-0.17.0/zig.exe;-DUNGYP_ZIG_TARGET=$arch-linux-gnu.2.28" "-DCMAKE_MAKE_PROGRAM=$ninja" -P tests/cmake/cross-linux.cmake
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-cross-modules
+          path: build/cross-os/artifacts/
+          if-no-files-found: error
+  cross-os-load:
+    needs: cross-os-build
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-cross-modules
+          path: build/cross-modules
+      - name: Load the modules built on Windows
+        shell: bash
+        run: |
+          for module in "$PWD/build/cross-modules/${{ matrix.arch }}/"*.node; do
+            node tests/js/assert-addon.cjs "$module"
+          done
+  cross-windows:
+    runs-on: windows-2022
+    strategy:
+      matrix:
+        target:
+          - platform: Win32
+            arch: ia32
+            machine: 4c01
+          - platform: ARM64
+            arch: arm64
+            machine: 64aa
+        example: [node-api-c, node-api-cpp]
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S examples/${{ matrix.example }} -B build/cross -G "Visual Studio 17 2022" -A ${{ matrix.target.platform }} -DUNGYP_ARCH=${{ matrix.target.arch }} -DUNGYP_OFFLINE=ON
+      - run: cmake --build build/cross --config Release
+      - shell: pwsh
+        run: |
+          $target = '${{ matrix.example }}'.Replace('-', '_')
+          cmake "-DADDON=$PWD/build/cross/Release/$target.node" "-DMACHINE=${{ matrix.target.machine }}" -P tests/cmake/assert-pe-machine.cmake
+  cross-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [node-api-c, node-api-cpp]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+      - run: cmake -S examples/${{ matrix.example }} -B build/cross --toolchain "${{ github.workspace }}/cmake/toolchains/linux-aarch64.cmake" -DUNGYP_ARCH=arm64 -DUNGYP_OFFLINE=ON -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/cross --parallel
+      - shell: bash
+        run: |
+          target="${{ matrix.example }}"
+          readelf -h "build/cross/Release/${target//-/_}.node" | grep 'Machine:.*AArch64'
+  cross-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        example: [node-api-c, node-api-cpp]
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S examples/${{ matrix.example }} -B build/universal "-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64" -DUNGYP_OFFLINE=ON -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/universal --parallel
+      - shell: bash
+        run: |
+          target="${{ matrix.example }}"
+          lipo "build/universal/Release/${target//-/_}.node" -verify_arch x86_64 arm64
+  electron:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --prefix build/electron-runtime electron@35.0.0
+      - run: cmake -S examples/node-api-c -B build/napi -DUNGYP_OFFLINE=ON
+      - run: cmake --build build/napi --config Release
+      - run: node tests/js/assert-addon.cjs "${{ github.workspace }}/build/napi/Release/node_api_c.node"
+      - run: cmake -S examples/node-v8 -B build/electron-v8 -DUNGYP_RUNTIME=electron "-DUNGYP_NODE_VERSION=35.0.0"
+      - run: cmake --build build/electron-v8 --config Release
+      - run: node tests/js/assert-electron.cjs build/electron-runtime/node_modules/electron/dist/electron.exe build/napi/Release/node_api_c.node build/electron-v8/Release/node_v8.node

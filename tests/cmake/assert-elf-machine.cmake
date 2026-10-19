@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.24)
+# ELF64, little endian, ET_DYN. MACHINE is the two-byte e_machine in hex.
+file(READ "${ADDON}" header LIMIT 20 HEX)
+if(NOT header MATCHES "^7f454c460201")
+    message(FATAL_ERROR "${ADDON}: expected a little-endian ELF64 module")
+endif()
+string(SUBSTRING "${header}" 32 8 type_machine)
+if(NOT type_machine STREQUAL "0300${MACHINE}")
+    message(FATAL_ERROR "${ADDON}: expected ET_DYN with machine ${MACHINE}, got ${type_machine}")
+endif()
+message(STATUS "${ADDON}: ELF64 machine ${MACHINE}")
