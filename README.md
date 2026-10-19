@@ -1,6 +1,10 @@
 # ungyp
 
-用 CMake 构建 Node.js / Electron 原生模块。需要 CMake 3.25+、Git 和 C++ 编译器；构建无需 Node.js、npm 或 Python。
+用 CMake 构建 Node.js / Electron 原生模块。
+
+## 快速开始
+
+创建以下两个文件，通过 FetchContent 引入 `v1.0.0`：
 
 `CMakeLists.txt`
 
@@ -48,4 +52,30 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config R
 node -p "require('./build/Release/hello.node').hello()"
 ```
 
-[MIT License](LICENSE) · 内置 node-api-headers 1.9.0，[许可证](cmake/third_party/node-api-headers/LICENSE)。
+## 交叉编译
+
+### Windows → Linux：Clang 示例
+
+```sh
+cmake -S . -B build/linux-arm64 -G Ninja --toolchain /path/to/ungyp/cmake/toolchains/clang-linux.cmake "-DUNGYP_LLVM_ROOT=C:/tools/llvm" -DUNGYP_LINUX_TARGET=aarch64-linux-gnu "-DCMAKE_SYSROOT=C:/sdk/linux-arm64" -DCMAKE_BUILD_TYPE=Release
+cmake --build build/linux-arm64 --parallel
+```
+
+## 示例与测试
+
+| 路径 | 内容 |
+| --- | --- |
+| [examples/node-api-c](examples/node-api-c) | C Node-API 模块 |
+| [examples/node-api-cpp](examples/node-api-cpp) | C++ Node-API 模块 |
+| [examples/node-v8](examples/node-v8) | Node/V8 模块 |
+| [tests/projects](tests/projects) | 集成用例 |
+
+```sh
+cmake -S . -B build/tests -DUNGYP_BUILD_TESTS=ON -DUNGYP_NODE_VERSION=22.14.0 -DCMAKE_BUILD_TYPE=Release
+cmake --build build/tests --config Release --parallel
+ctest --test-dir build/tests -C Release --output-on-failure
+```
+
+## 许可证
+
+[MIT License](LICENSE)

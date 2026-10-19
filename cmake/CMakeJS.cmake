@@ -1,4 +1,4 @@
-# Migration bridge: retain existing CMAKE_JS_INC/LIB/SRC based CMakeLists.txt.
+# 兼容Cmake-js的CMake模块
 include("${CMAKE_CURRENT_LIST_DIR}/ungyp.cmake")
 ungyp_setup()
 get_target_property(CMAKE_JS_INC ungyp::node INTERFACE_INCLUDE_DIRECTORIES)
