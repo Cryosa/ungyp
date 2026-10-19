@@ -15,7 +15,7 @@ project(hello LANGUAGES CXX)
 include(FetchContent)
 FetchContent_Declare(ungyp
     GIT_REPOSITORY https://github.com/Cryosa/ungyp.git
-    GIT_TAG v1.0.0
+    GIT_TAG v1.0.1
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(ungyp)

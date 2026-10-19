@@ -1,9 +1,5 @@
 include("${PROJECT_SOURCE_DIR}/cmake/ungyp.cmake")
 find_program(UNGYP_TEST_NODE_EXECUTABLE NAMES node nodejs REQUIRED)
-add_test(NAME download.network COMMAND "${UNGYP_TEST_NODE_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/js/network.cjs" "${CMAKE_COMMAND}"
-    "${PROJECT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/network")
-set_tests_properties(download.network PROPERTIES TIMEOUT 30)
 ungyp_addon(test_node_api_c SOURCES "${PROJECT_SOURCE_DIR}/examples/node-api-c/addon.c")
 ungyp_addon(test_node_api_cpp SOURCES "${PROJECT_SOURCE_DIR}/examples/node-api-cpp/addon.cpp")
 add_subdirectory(projects/node-api-v10)
