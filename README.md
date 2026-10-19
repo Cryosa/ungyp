@@ -4,7 +4,7 @@
 
 ## 快速开始
 
-创建以下两个文件，通过 FetchContent 引入 `v1.0.0`：
+创建以下两个文件，通过 FetchContent 引入 `v1.0.1`：
 
 `CMakeLists.txt`
 
