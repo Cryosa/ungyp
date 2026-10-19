@@ -1,6 +1,6 @@
 # ungyp
 
-用 CMake 构建 Node.js / Electron 原生模块。
+用 CMake 构建 Node.js / Electron 原生模块。不含GYP工具，兼容CmakeJs生态，不依赖Npm与Npx。
 
 ## 快速开始
 
